@@ -1,3 +1,17 @@
 {
-  "makefile.configureOnOpen": true
+  "makefile.configureOnOpen": true,
+
+  "github.copilot.chat.testGeneration.instructions": [
+    {
+      "text": "Use verbose class name that clearly state the test case. Use the AAA pattern for test cases. Arrange, Act, Assert."
+    },
+    {
+      "file": "code-style.md" // import instructions from file `code-style.md`
+    }
+  ],
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Be extremely detailed with the file changes and the reason for the change. "
+    }
+  ]
 }
