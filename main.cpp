@@ -6,6 +6,8 @@
 #include <cstring>
 #include <sstream>
 #include <iomanip>
+#include <set>
+#include <fstream>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #define ASM_OPTIMIZED_LOOP
@@ -44,25 +46,27 @@ void optimized_loop_work() {
 #endif
 }
 
-void debug_bench() {
-    std::cout << "\n[Debug] Starting simple sequential benchmark..." << std::endl;
-    uint64_t total_iterations = 2ull * (uint64_t(uint32_t(-1)) + 1);
-    std::cout << "[Debug] Will count up to " << format_large_number(total_iterations) << " numbers" << std::endl;
-    auto start = std::chrono::high_resolution_clock::now();
-    std::cout << "[Debug] Starting loop 1..." << std::endl;
-    optimized_loop_work();
-    auto mid = std::chrono::high_resolution_clock::now();
-    std::cout << "[Debug] Loop 1 completed in " << std::chrono::duration<double>(mid - start).count() << "s" << std::endl;
-    std::cout << "[Debug] Starting loop 2..." << std::endl;
-    optimized_loop_work();
-    auto end = std::chrono::high_resolution_clock::now();
-    double total_time = std::chrono::duration<double>(end - start).count();
-    double loop2_time = std::chrono::duration<double>(end - mid).count();
-    std::cout << "[Debug] Loop 2 completed in " << loop2_time << "s" << std::endl;
-    std::cout << "[Debug] Benchmark finished. Total time elapsed: " << total_time << "s" << std::endl;
-    std::cout << "[Debug] Average time per loop: " << (total_time / 2) << "s" << std::endl;
-    std::cout << "[Debug] Total numbers counted: " << format_large_number(total_iterations) << std::endl;
-    std::cout << "[Debug] Numbers per second: " << std::scientific << (total_iterations / total_time) << std::endl;
+unsigned get_physical_cores_linux() {
+    std::ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo) return 0;
+    std::set<std::pair<int, int>> core_ids;
+    std::string line;
+    int physical_id = -1, core_id = -1;
+    while (std::getline(cpuinfo, line)) {
+        if (line.find("physical id") != std::string::npos) {
+            physical_id = std::stoi(line.substr(line.find(":") + 1));
+        } else if (line.find("core id") != std::string::npos) {
+            core_id = std::stoi(line.substr(line.find(":") + 1));
+        } else if (line.empty() && physical_id != -1 && core_id != -1) {
+            core_ids.emplace(physical_id, core_id);
+            physical_id = core_id = -1;
+        }
+    }
+    // For last processor
+    if (physical_id != -1 && core_id != -1) {
+        core_ids.emplace(physical_id, core_id);
+    }
+    return core_ids.empty() ? 0 : core_ids.size();
 }
 
 void generic_bench(int thread_count, const char* label, int seconds) {
@@ -77,21 +81,8 @@ void generic_bench(int thread_count, const char* label, int seconds) {
             uint64_t local_loops = 0;
             uint32_t local_final = 0;
             while (!stop_flag.load(std::memory_order_relaxed)) {
-                volatile uint32_t count = 0xFFFFFFFF;
-#ifdef ASM_OPTIMIZED_LOOP
-                asm volatile (
-                    "1: sub $1, %[cnt]\n\t"
-                    "jnz 1b\n\t"
-                    : [cnt] "+r" (count)
-                    :
-                    : "cc"
-                );
-#else
-                while (count != 0) {
-                    --count;
-                }
-#endif
-                local_final = count;
+                optimized_loop_work();
+                local_final = 0; // always zero after loop
                 ++local_loops;
             }
             loops_completed[i] = local_loops;
@@ -107,9 +98,6 @@ void generic_bench(int thread_count, const char* label, int seconds) {
         uint64_t thread_iterations = loops_completed[i] * (uint64_t(uint32_t(-1)) + 1);
         total_loops += loops_completed[i];
         total_iterations += thread_iterations;
-        if (i < 3) {
-            std::cout << "   Thread " << i << ": " << loops_completed[i] << " loops, " << thread_iterations << " total" << std::endl;
-        }
     }
     double duration = std::chrono::duration<double>(end - start).count();
     std::cout << "[" << label << "] Benchmark finished. Time: " << duration << "s" << std::endl;
@@ -135,9 +123,28 @@ void singlepass_bench(int thread_count) {
 }
 
 int main(int argc, char* argv[]) {
+    if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
+        std::cout << "Usage: ./speed_bench [singlepass]" << std::endl;
+        std::cout << "  No argument: Run multi-threaded throughput benchmark (10s)" << std::endl;
+        std::cout << "  singlepass : Each physical core/thread counts from 4294967295 to 0 once" << std::endl;
+        std::cout << "  -h, --help : Show this help message" << std::endl;
+        return 0;
+    }
+    if (argc > 1 && std::strcmp(argv[1], "singlepass") != 0) {
+        std::cout << "illegal argument. Use --help for info" << std::endl;
+        return 1;
+    }
     bool singlepass_mode = argc > 1 && std::strcmp(argv[1], "singlepass") == 0;
     unsigned logical = std::thread::hardware_concurrency();
-    unsigned physical = logical / 2 > 0 ? logical / 2 : 1; // Simple estimation
+    unsigned physical = 1;
+#if defined(__linux__)
+    physical = get_physical_cores_linux();
+    if (physical == 0) {
+        physical = logical / 2 > 0 ? logical / 2 : 1;
+    }
+#else
+    physical = logical / 2 > 0 ? logical / 2 : 1;
+#endif
     std::cout << "C++ speed benchmark starting." << std::endl;
     std::cout << "Detected " << logical << " logical cores and ~" << physical << " physical cores." << std::endl;
     if (singlepass_mode) {

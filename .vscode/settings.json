@@ -13,5 +13,9 @@
     {
       "text": "Be extremely detailed with the file changes and the reason for the change. "
     }
-  ]
+  ],
+  "files.associations": {
+    "*.css": "tailwindcss",
+    "ostream": "cpp"
+  }
 }
