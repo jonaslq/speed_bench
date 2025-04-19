@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <set>
 #include <fstream>
+#include <cstdlib>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #define ASM_OPTIMIZED_LOOP
@@ -123,18 +124,34 @@ void singlepass_bench(int thread_count) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc > 1 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) {
-        std::cout << "Usage: ./speed_bench [singlepass]" << std::endl;
-        std::cout << "  No argument: Run multi-threaded throughput benchmark (10s)" << std::endl;
-        std::cout << "  singlepass : Each physical core/thread counts from 4294967295 to 0 once" << std::endl;
-        std::cout << "  -h, --help : Show this help message" << std::endl;
-        return 0;
+    int max_cores = -1;
+    // Parse arguments
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            std::cout << "Usage: ./speed_bench [singlepass] [--max-cores=N]" << std::endl;
+            std::cout << "  No argument: Run multi-threaded throughput benchmark (10s)" << std::endl;
+            std::cout << "  singlepass : Each physical core/thread counts from 4294967295 to 0 once" << std::endl;
+            std::cout << "  --max-cores=N : Use at most N threads/cores" << std::endl;
+            std::cout << "  -h, --help : Show this help message" << std::endl;
+            return 0;
+        } else if (std::strncmp(argv[i], "--max-cores=", 12) == 0) {
+            max_cores = std::atoi(argv[i] + 12);
+            if (max_cores < 1) {
+                std::cout << "illegal value for --max-cores. Use --help for info" << std::endl;
+                return 1;
+            }
+        } else if (std::strcmp(argv[i], "singlepass") != 0) {
+            std::cout << "illegal argument. Use --help for info" << std::endl;
+            return 1;
+        }
     }
-    if (argc > 1 && std::strcmp(argv[1], "singlepass") != 0) {
-        std::cout << "illegal argument. Use --help for info" << std::endl;
-        return 1;
+    bool singlepass_mode = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "singlepass") == 0) {
+            singlepass_mode = true;
+            break;
+        }
     }
-    bool singlepass_mode = argc > 1 && std::strcmp(argv[1], "singlepass") == 0;
     unsigned logical = std::thread::hardware_concurrency();
     unsigned physical = 1;
 #if defined(__linux__)
@@ -145,8 +162,16 @@ int main(int argc, char* argv[]) {
 #else
     physical = logical / 2 > 0 ? logical / 2 : 1;
 #endif
+    if (max_cores > 0) {
+        if (singlepass_mode) {
+            if ((unsigned)max_cores < physical) physical = max_cores;
+        } else {
+            if ((unsigned)max_cores < physical) physical = max_cores;
+            if ((unsigned)max_cores < logical) logical = max_cores;
+        }
+    }
     std::cout << "C++ speed benchmark starting." << std::endl;
-    std::cout << "Detected " << logical << " logical cores and ~" << physical << " physical cores." << std::endl;
+    std::cout << "Detected " << physical << " physical cores and " << logical << " logical cores." << std::endl;
     if (singlepass_mode) {
         std::cout << "Running in singlepass mode (one loop per physical core, parallel)" << std::endl;
         std::cout << "Each thread counts from " << uint32_t(-1) << " to 0 once." << std::endl;

@@ -16,6 +16,7 @@
   ],
   "files.associations": {
     "*.css": "tailwindcss",
-    "ostream": "cpp"
+    "ostream": "cpp",
+    "*.tcc": "cpp"
   }
 }
