@@ -186,7 +186,7 @@ int main(int argc, char* argv[]) {
         uint64_t total_counts = uint64_t(physical) * (uint64_t(uint32_t(-1)) + 1);
         std::cout << "[Singlepass] All threads completed one loop." << std::endl;
         std::cout << "[Singlepass] Time elapsed: " << duration << "s" << std::endl;
-        std::cout << "[Singlepass] Counted " << total_counts << " times in " << duration << "s" << std::endl;
+        std::cout << "[Singlepass] Counted " << total_counts << " (That's roughly " << format_large_number(total_counts) << ") times in " << duration << "s" << std::endl;
     } else {
         if (logical > physical) {
             generic_bench(physical, "Physical Cores Only", 10);
