@@ -153,9 +153,22 @@ void simd_bench(int thread_count, const char* label, int seconds, bool use_sse, 
 }
 
 void scaling_bench(const char* label, int seconds, bool use_sse = false, bool use_avx2 = false, bool use_avx512 = false) {
-    std::vector<int> thread_counts = {1, 2, 4, 8, 16, 32};
+    // Använd dynamisk skalning baserat på tillgängliga kärnor
+    std::vector<unsigned int> thread_counts;
     
-    std::cout << "\n[" << label << "] Running scaling benchmark..." << std::endl;
+    // Beräkna maximalt antal trådar baserat på hårdvaran
+    unsigned int max_threads = std::thread::hardware_concurrency();
+    
+    // Bygg thread_counts vektorn dynamiskt
+    for (unsigned int threads = 1; threads <= max_threads; threads *= 2) {
+        thread_counts.push_back(threads);
+    }
+    // Om sista värdet inte är max_threads, lägg till det
+    if (thread_counts.back() != max_threads) {
+        thread_counts.push_back(max_threads);
+    }
+    
+    std::cout << "\n[" << label << "] Running benchmark..." << std::endl;
     std::cout << "Testing with " << seconds << " seconds per thread count" << std::endl;
     
     if (use_sse || use_avx2 || use_avx512) {
@@ -169,16 +182,15 @@ void scaling_bench(const char* label, int seconds, bool use_sse = false, bool us
     
     uint64_t base_iterations = 0;
     
-    for (int threads : thread_counts) {
+    for (unsigned int threads : thread_counts) {
         if (use_sse || use_avx2 || use_avx512) {
             simd_bench(threads, "Scale", seconds, use_sse, use_avx2, use_avx512);
         } else {
             generic_bench(threads, "Scale", seconds);
         }
         
-        // Extract iterations/second from last line of output for scaling calculation
         if (base_iterations == 0) {
-            base_iterations = threads; // First run is our baseline
+            base_iterations = threads;
         } else {
             double scaling = double(threads) / base_iterations;
             std::cout << "Scaling factor vs single thread: " << std::fixed 
@@ -261,11 +273,12 @@ int main(int argc, char* argv[]) {
 
     // Adjust thread counts for SIMD modes
     int counters_per_thread = use_avx512 ? 16 : (use_avx2 ? 8 : (use_sse ? 4 : 1));
-    if (use_sse || use_avx2 || use_avx512) {
+    if (use_sse || use_avx2) {
         physical = (physical + counters_per_thread - 1) / counters_per_thread;
         logical = (logical + counters_per_thread - 1) / counters_per_thread;
     }
-
+    // För AVX-512 behåller vi det faktiska antalet kärnor som detekterades
+    
     if (max_cores > 0) {
         if (singlepass_mode) {
             if ((unsigned)max_cores < physical) physical = max_cores;
@@ -324,7 +337,10 @@ int main(int argc, char* argv[]) {
                   << format_large_number(uint64_t(double(total_counts) / duration)) << std::endl;
     } else {
         if (use_sse || use_avx2 || use_avx512) {
-            if (logical > physical) {
+            if (use_avx512) {
+                // För AVX-512 utan scaling, använd maximalt tillgängliga kärnor
+                simd_bench(logical, "SIMD AVX-512", 10, false, false, true);
+            } else if (logical > physical) {
                 simd_bench(physical, "SIMD Physical Cores", 10, use_sse, use_avx2, use_avx512);
                 simd_bench(logical, "SIMD All Cores", 10, use_sse, use_avx2, use_avx512);
             } else {
