@@ -1,18 +1,28 @@
 # Enkel Makefile för C++-projekt
 CXX = g++
-CXXFLAGS = -O3 -march=native -std=c++20
-CXXFLAGS_AVX = -O3 -march=native -mavx2 -std=c++20
+COMMON_FLAGS = -O3 -Wall -Wextra -std=c++23 -fopenmp
+BASE_FLAGS = $(COMMON_FLAGS) -march=native
+SSE_FLAGS = $(COMMON_FLAGS) -march=native -msse4.2
+AVX2_FLAGS = $(COMMON_FLAGS) -march=native -mavx2
+AVX512_FLAGS = $(COMMON_FLAGS) -march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl
+
+SRCS = main.cpp loops.cpp
 TARGET = speed_bench
-SRC = main.cpp
 
-all: $(TARGET) $(TARGET)_avx
+all: $(TARGET) $(TARGET)_sse $(TARGET)_avx2 $(TARGET)_avx512
 
-$(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
+$(TARGET): $(SRCS)
+	$(CXX) $(BASE_FLAGS) -o $(TARGET) $(SRCS)
 
-$(TARGET)_avx: $(SRC)
-	$(CXX) $(CXXFLAGS_AVX) -o $(TARGET)_avx $(SRC)
+$(TARGET)_sse: $(SRCS)
+	$(CXX) $(SSE_FLAGS) -o $@ $(SRCS)
+
+$(TARGET)_avx2: $(SRCS)
+	$(CXX) $(AVX2_FLAGS) -o $@ $(SRCS)
+
+$(TARGET)_avx512: $(SRCS)
+	$(CXX) $(AVX512_FLAGS) -o $@ $(SRCS)
 
 .PHONY: clean
 clean:
-	rm -f $(TARGET) $(TARGET)_avx
+	rm -f $(TARGET) $(TARGET)_sse $(TARGET)_avx2 $(TARGET)_avx512
