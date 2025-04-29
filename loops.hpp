@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <immintrin.h>
+#include <atomic>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #define ASM_OPTIMIZED_LOOP
