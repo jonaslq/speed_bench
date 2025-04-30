@@ -31,23 +31,26 @@ void sse_loop_work() {
     alignas(16) volatile uint32_t count[4] = {
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
-    
+
     __m128i vec = _mm_load_si128((__m128i const*)const_cast<uint32_t*>(count));
     const __m128i one = _mm_set1_epi32(1);
     const __m128i zero = _mm_setzero_si128();
-    
+
     do {
         vec = _mm_sub_epi32(vec, one);
         _mm_store_si128((__m128i*)const_cast<uint32_t*>(count), vec);
         std::atomic_thread_fence(std::memory_order_release);
-        
+
+        // Kontrollera om alla element i vektorn är noll
         __m128i cmp = _mm_cmpeq_epi32(vec, zero);
         int mask = _mm_movemask_epi8(cmp);
-        
-        if (mask == 0xFFFF) break;
-        
-        vec = _mm_load_si128((__m128i const*)const_cast<uint32_t*>(count));
+
+        if (mask == 0xFFFF) {
+            break; // Alla 4 element är noll
+        }
+
         std::atomic_thread_fence(std::memory_order_acquire);
+        vec = _mm_load_si128((__m128i const*)const_cast<uint32_t*>(count));
     } while (true);
 }
 
@@ -97,21 +100,26 @@ void avx512_loop_work() {
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
-    
+
+    // Kontrollera om AVX-512 är aktiverat vid kompilering
+#ifdef __AVX512F__
     __m512i vec = _mm512_load_si512(const_cast<uint32_t*>(count));
     const __m512i one = _mm512_set1_epi32(1);
     const __m512i zero = _mm512_setzero_si512();
-    
+
     do {
         vec = _mm512_sub_epi32(vec, one);
         _mm512_store_si512(const_cast<uint32_t*>(count), vec);
         std::atomic_thread_fence(std::memory_order_release);
-        
+
         __mmask16 mask = _mm512_cmpeq_epi32_mask(vec, zero);
-        
+
         if (mask == 0xFFFF) break;  // Alla 16 bitar måste vara satta
-        
+
         std::atomic_thread_fence(std::memory_order_acquire);
         vec = _mm512_load_si512(const_cast<uint32_t*>(count));
     } while (true);
+#else
+    throw std::runtime_error("AVX-512 instructions are not enabled in the compiler");
+#endif
 }
