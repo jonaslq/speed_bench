@@ -6,24 +6,24 @@
 class CPUFeatures {
 public:
     static bool hasSSE() {
-        return checkCPUFeature(7, 0);  // SSE bit
+        std::array<int, 4> cpui;
+        __cpuid(1, cpui[0], cpui[1], cpui[2], cpui[3]);
+        return (cpui[3] & (1 << 25)) != 0;  // Check EDX bit 25 for SSE
     }
     
     static bool hasAVX2() {
-        return checkCPUFeature(28, 7); // AVX2 bit
+        std::array<int, 4> cpui;
+        __cpuid(7, cpui[0], cpui[1], cpui[2], cpui[3]);
+        return (cpui[1] & (1 << 5)) != 0;   // Check EBX bit 5 for AVX2
     }
     
     static bool hasAVX512F() {
-        return checkCPUFeature(16, 7); // AVX-512 Foundation
+        std::array<int, 4> cpui;
+        __cpuid(7, cpui[0], cpui[1], cpui[2], cpui[3]);
+        return (cpui[1] & (1 << 16)) != 0;  // Check EBX bit 16 for AVX-512F
     }
 
 private:
-    static bool checkCPUFeature(int bit, int level) {
-        std::array<int, 4> cpui;
-        __cpuid(level, cpui[0], cpui[1], cpui[2], cpui[3]);
-        return (cpui[2] & (1 << bit)) != 0;
-    }
-    
     static void __cpuid(int level, int& a, int& b, int& c, int& d) {
         #if defined(__x86_64__) || defined(_M_X64)
             asm volatile("cpuid"

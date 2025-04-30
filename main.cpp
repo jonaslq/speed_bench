@@ -121,6 +121,20 @@ uint64_t simd_bench(int thread_count, const char* label, int seconds, bool use_s
               << thread_count << " threads (" << (thread_count * counters_per_thread) 
               << " parallel counters) for " << seconds << " seconds." << std::endl;
     
+    // Test SIMD support before starting threads
+    try {
+        if (use_avx512) {
+            avx512_loop_work();
+        } else if (use_avx2) {
+            avx2_loop_work();
+        } else if (use_sse) {
+            sse_loop_work();
+        }
+    } catch (const std::runtime_error& e) {
+        std::cout << "[" << label << "] " << e.what() << " - skipping this benchmark." << std::endl;
+        return 0;
+    }
+
     std::atomic<bool> stop_flag{false};
     std::vector<std::thread> threads;
     threads.reserve(thread_count);

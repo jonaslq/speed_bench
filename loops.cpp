@@ -1,4 +1,6 @@
 #include "loops.hpp"
+#include "cpu_features.hpp"
+#include <stdexcept>
 
 // Standard optimization loop
 void optimized_loop_work() {
@@ -21,6 +23,11 @@ void optimized_loop_work() {
 
 // SSE version - processes 4 counters in parallel using intrinsics
 void sse_loop_work() {
+    CPUFeatures features;
+    if (!features.hasSSE()) {
+        throw std::runtime_error("CPU does not support SSE instructions");
+    }
+
     alignas(16) volatile uint32_t count[4] = {
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
@@ -46,6 +53,11 @@ void sse_loop_work() {
 
 // AVX2 version - processes 8 counters in parallel using intrinsics
 void avx2_loop_work() {
+    CPUFeatures features;
+    if (!features.hasAVX2()) {
+        throw std::runtime_error("CPU does not support AVX2 instructions");
+    }
+
     alignas(32) volatile uint32_t count[8] = {
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
@@ -74,6 +86,11 @@ void avx2_loop_work() {
 
 // AVX-512 version - processes 16 counters in parallel using intrinsics
 void avx512_loop_work() {
+    CPUFeatures features;
+    if (!features.hasAVX512F()) {
+        throw std::runtime_error("CPU does not support AVX-512 instructions");
+    }
+
     alignas(64) volatile uint32_t count[16] = {
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
