@@ -11,6 +11,25 @@
 #include <cstdlib>
 #include "loops.hpp"
 
+// Benchmark configuration constants
+struct BenchmarkConfig {
+    static constexpr int DEFAULT_BENCHMARK_SECONDS = 10;
+    static constexpr int SCALING_BENCHMARK_SECONDS = 5;
+    static constexpr uint64_t BATCH_SIZE = 1000;
+    static constexpr uint64_t MAX_UINT32 = (1ULL << 32) - 1;
+    
+    // SIMD configurations
+    static constexpr int SSE_COUNTERS = 4;
+    static constexpr int AVX2_COUNTERS = 8;
+    static constexpr int AVX512_COUNTERS = 16;
+    
+    static int get_counters_per_thread(bool use_avx512, bool use_avx2, bool use_sse) {
+        return use_avx512 ? AVX512_COUNTERS : 
+               (use_avx2 ? AVX2_COUNTERS : 
+               (use_sse ? SSE_COUNTERS : 1));
+    }
+};
+
 std::string format_large_number(uint64_t number) {
     std::ostringstream oss;
     if (number >= 1000000000) {
@@ -89,7 +108,7 @@ void generic_bench(int thread_count, const char* label, int seconds) {
 
 void simd_bench(int thread_count, const char* label, int seconds, bool use_sse, bool use_avx2, bool use_avx512) {
     const char* simd_type = use_avx512 ? "AVX-512" : (use_avx2 ? "AVX2" : "SSE");
-    int counters_per_thread = use_avx512 ? 16 : (use_avx2 ? 8 : 4);
+    int counters_per_thread = BenchmarkConfig::get_counters_per_thread(use_avx512, use_avx2, use_sse);
     
     std::cout << "\n[" << label << "] Starting " << simd_type << " benchmark with " 
               << thread_count << " threads (" << (thread_count * counters_per_thread) 
@@ -97,59 +116,67 @@ void simd_bench(int thread_count, const char* label, int seconds, bool use_sse, 
     
     std::atomic<bool> stop_flag{false};
     std::vector<std::thread> threads;
+    threads.reserve(thread_count);
     std::vector<uint64_t> loops_completed(thread_count, 0);
-    auto start = std::chrono::high_resolution_clock::now();
     
-    for (int i = 0; i < thread_count; ++i) {
-        threads.emplace_back([&, i, use_sse, use_avx2, use_avx512]() {
-            uint64_t local_loops = 0;
-            while (!stop_flag.load(std::memory_order_relaxed)) {
-                if (use_avx512) {
-                    avx512_loop_work();
-                } else if (use_avx2) {
-                    avx2_loop_work();
-                } else {
-                    sse_loop_work();
+    try {
+        auto start = std::chrono::steady_clock::now();
+        
+        for (int i = 0; i < thread_count; ++i) {
+            threads.emplace_back([&, i, use_sse, use_avx2, use_avx512]() {
+                uint64_t local_loops = 0;
+                while (!stop_flag.load(std::memory_order_relaxed)) {
+                    if (use_avx512) {
+                        avx512_loop_work();
+                    } else if (use_avx2) {
+                        avx2_loop_work();
+                    } else {
+                        sse_loop_work();
+                    }
+                    ++local_loops;
                 }
-                ++local_loops;
-            }
-            loops_completed[i] = local_loops;
-        });
-    }
-    
-    std::this_thread::sleep_for(std::chrono::seconds(seconds));
-    stop_flag.store(true, std::memory_order_seq_cst);
-    for (auto& t : threads) t.join();
-    auto end = std::chrono::high_resolution_clock::now();
-    
-    uint64_t total_loops = 0;
-    const uint64_t max_uint32 = (1ULL << 32) - 1; // 2^32 - 1 via bitskift
-    uint64_t total_iterations = 0;
-    
-    // Beräkna i steg för att undvika overflow
-    for (int i = 0; i < thread_count; ++i) {
-        total_loops += loops_completed[i];
-        
-        // Räkna ut iterationer för denna tråd i mindre steg
-        uint64_t remaining_loops = loops_completed[i];
-        const uint64_t batch_size = 1000;  // Processa i batches för att undvika overflow
-        
-        while (remaining_loops > 0) {
-            uint64_t current_batch = std::min(remaining_loops, batch_size);
-            uint64_t batch_iterations = current_batch * (max_uint32 + 1ULL) * counters_per_thread;
-            total_iterations += batch_iterations;
-            remaining_loops -= current_batch;
+                loops_completed[i] = local_loops;
+            });
         }
+        
+        std::this_thread::sleep_for(std::chrono::seconds(seconds));
+        stop_flag.store(true, std::memory_order_seq_cst);
+        
+        for (auto& t : threads) {
+            if (t.joinable()) t.join();
+        }
+        
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration<double>(end - start).count();
+        
+        uint64_t total_loops = 0;
+        uint64_t total_iterations = 0;
+        
+        for (int i = 0; i < thread_count; ++i) {
+            total_loops += loops_completed[i];
+            uint64_t remaining_loops = loops_completed[i];
+            
+            while (remaining_loops > 0) {
+                uint64_t current_batch = std::min(remaining_loops, BenchmarkConfig::BATCH_SIZE);
+                uint64_t batch_iterations = current_batch * (BenchmarkConfig::MAX_UINT32 + 1ULL) * counters_per_thread;
+                total_iterations += batch_iterations;
+                remaining_loops -= current_batch;
+            }
+        }
+        
+        uint64_t iterations_per_second = uint64_t(double(total_iterations) / duration);
+        
+        std::cout << "[" << label << "] Benchmark finished. Time: " << std::fixed << std::setprecision(2) 
+                  << duration << "s" << std::endl;
+        std::cout << "[" << label << "] Total loops: " << total_loops << std::endl;
+        std::cout << "[" << label << "] Total iterations: " << format_large_number(total_iterations) << std::endl;
+        std::cout << "[" << label << "] Iterations per second: " << format_large_number(iterations_per_second) << std::endl;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error in benchmark: " << e.what() << std::endl;
+        stop_flag.store(true, std::memory_order_seq_cst);
+        throw;
     }
-    
-    double duration = std::chrono::duration<double>(end - start).count();
-    uint64_t iterations_per_second = uint64_t(double(total_iterations) / duration);
-    
-    std::cout << "[" << label << "] Benchmark finished. Time: " << std::fixed << std::setprecision(2) 
-              << duration << "s" << std::endl;
-    std::cout << "[" << label << "] Total loops: " << total_loops << std::endl;
-    std::cout << "[" << label << "] Total iterations: " << format_large_number(total_iterations) << std::endl;
-    std::cout << "[" << label << "] Iterations per second: " << format_large_number(iterations_per_second) << std::endl;
 }
 
 void scaling_bench(const char* label, int seconds, bool use_sse = false, bool use_avx2 = false, bool use_avx512 = false) {

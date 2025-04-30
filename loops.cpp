@@ -92,9 +92,9 @@ void avx512_loop_work() {
         
         __mmask16 mask = _mm512_cmpeq_epi32_mask(vec, zero);
         
-        if (mask == 0xFFFF) break;
+        if (mask == 0xFFFF) break;  // Alla 16 bitar måste vara satta
         
-        vec = _mm512_load_si512(const_cast<uint32_t*>(count));
         std::atomic_thread_fence(std::memory_order_acquire);
+        vec = _mm512_load_si512(const_cast<uint32_t*>(count));
     } while (true);
 }
