@@ -1,4 +1,4 @@
-# Enkel Makefile för C++-projekt
+# Simple Makefile for C++ project
 CXX = g++
 COMMON_FLAGS = -O3 -Wall -Wextra -std=c++23 -fopenmp
 BASE_FLAGS = $(COMMON_FLAGS) -march=native

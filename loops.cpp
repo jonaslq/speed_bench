@@ -41,12 +41,12 @@ void sse_loop_work() {
         _mm_store_si128((__m128i*)const_cast<uint32_t*>(count), vec);
         std::atomic_thread_fence(std::memory_order_release);
 
-        // Kontrollera om alla element i vektorn är noll
+        // Check if all elements in the vector are zero
         __m128i cmp = _mm_cmpeq_epi32(vec, zero);
         int mask = _mm_movemask_epi8(cmp);
 
         if (mask == 0xFFFF) {
-            break; // Alla 4 element är noll
+            break; // All 4 elements are zero
         }
 
         std::atomic_thread_fence(std::memory_order_acquire);

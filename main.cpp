@@ -203,17 +203,17 @@ uint64_t simd_bench(int thread_count, const char* label, int seconds, bool use_s
 }
 
 void scaling_bench(const char* label, int seconds, bool use_sse = false, bool use_avx2 = false, bool use_avx512 = false) {
-    // Använd dynamisk skalning baserat på tillgängliga kärnor
+    // Use dynamic scaling based on available cores
     std::vector<unsigned int> thread_counts;
     
-    // Beräkna maximalt antal trådar baserat på hårdvaran
+    // Calculate maximum number of threads based on hardware
     unsigned int max_threads = std::thread::hardware_concurrency();
     
-    // Bygg thread_counts vektorn dynamiskt
+    // Build the thread_counts vector dynamically
     for (unsigned int threads = 1; threads <= max_threads; threads *= 2) {
         thread_counts.push_back(threads);
     }
-    // Om sista värdet inte är max_threads, lägg till det
+    // If the last value is not max_threads, add it
     if (thread_counts.back() != max_threads) {
         thread_counts.push_back(max_threads);
     }
@@ -261,13 +261,13 @@ int main(int argc, char* argv[]) {
     bool use_sse = false;
     bool use_avx2 = false;
     bool use_avx512 = false;
-    bool explicit_mode = false;  // Sant om användaren specificerat någon flagga
+    bool explicit_mode = false;  // True if the user specified any flag
     
     std::vector<BenchmarkResult> results;
     
     // Parse arguments
     for (int i = 1; i < argc; ++i) {
-        explicit_mode = true;  // Någon parameter angavs
+        explicit_mode = true;  // Some parameter was specified
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             std::cout << "Usage: ./speed_bench [singlepass] [--avx2|--avx512|--sse] [--scaling] [--max-cores=N]" << std::endl;
             std::cout << "  No argument: Run multi-threaded throughput benchmark (10s)" << std::endl;
@@ -341,7 +341,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "C++ speed benchmark starting." << std::endl;
     
-    // Om inga parametrar angavs, kör alla tillgängliga SIMD-typer
+    // If no parameters were specified, run all available SIMD types
     if (!explicit_mode && !singlepass_mode && !scaling_test) {
         std::cout << "\nRunning comprehensive benchmark with all available SIMD types..." << std::endl;
         std::cout << "Each test will run for 10 seconds." << std::endl;
@@ -371,7 +371,7 @@ int main(int argc, char* argv[]) {
             results.push_back({"AVX-512", simd_bench(logical, "AVX-512", 10, false, false, true)});
         }
         
-        // Skriv ut sammanfattningen
+        // Print the summary
         std::cout << "\n========================================" << std::endl;
         std::cout << "BENCHMARK SUMMARY" << std::endl;
         std::cout << "----------------------------------------" << std::endl;
@@ -398,7 +398,7 @@ int main(int argc, char* argv[]) {
         physical = (physical + counters_per_thread - 1) / counters_per_thread;
         logical = (logical + counters_per_thread - 1) / counters_per_thread;
     }
-    // För AVX-512 behåller vi det faktiska antalet kärnor som detekterades
+    // For AVX-512, keep the actual number of cores detected
     
     std::cout << "Detected " << (physical * counters_per_thread)
               << " physical and " << (logical * counters_per_thread)
@@ -442,7 +442,7 @@ int main(int argc, char* argv[]) {
     } else {
         if (use_sse || use_avx2 || use_avx512) {
             if (use_avx512) {
-                // För AVX-512 utan scaling, använd maximalt tillgängliga kärnor
+                // For AVX-512 without scaling, use the maximum available cores
                 simd_bench(logical, "SIMD AVX-512", 10, false, false, true);
             } else if (logical > physical) {
                 simd_bench(physical, "SIMD Physical Cores", 10, use_sse, use_avx2, use_avx512);
