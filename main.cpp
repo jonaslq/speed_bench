@@ -10,6 +10,9 @@
 #include <fstream>
 #include <cstdlib>
 #include "loops.hpp"
+#include <vector>
+#include <string>
+#include <map>
 
 // Benchmark configuration constants
 struct BenchmarkConfig {
@@ -67,7 +70,7 @@ unsigned get_physical_cores_linux() {
     return core_ids.empty() ? 0 : core_ids.size();
 }
 
-void generic_bench(int thread_count, const char* label, int seconds) {
+uint64_t generic_bench(int thread_count, const char* label, int seconds) {
     std::cout << "\n[" << label << "] Starting benchmark with " << thread_count << " threads for " << seconds << " seconds." << std::endl;
     std::atomic<bool> stop_flag{false};
     std::vector<std::thread> threads;
@@ -100,13 +103,17 @@ void generic_bench(int thread_count, const char* label, int seconds) {
         total_iterations += thread_iterations;
     }
     double duration = std::chrono::duration<double>(end - start).count();
+    uint64_t iterations_per_second = uint64_t(total_iterations / duration);
+    
     std::cout << "[" << label << "] Benchmark finished. Time: " << duration << "s" << std::endl;
     std::cout << "[" << label << "] Total loops: " << total_loops << std::endl;
     std::cout << "[" << label << "] Total iterations: " << format_large_number(total_iterations) << std::endl;
-    std::cout << "[" << label << "] Iterations per second: " << format_large_number(uint64_t(total_iterations / duration)) << std::endl;
+    std::cout << "[" << label << "] Iterations per second: " << format_large_number(iterations_per_second) << std::endl;
+    
+    return iterations_per_second;
 }
 
-void simd_bench(int thread_count, const char* label, int seconds, bool use_sse, bool use_avx2, bool use_avx512) {
+uint64_t simd_bench(int thread_count, const char* label, int seconds, bool use_sse, bool use_avx2, bool use_avx512) {
     const char* simd_type = use_avx512 ? "AVX-512" : (use_avx2 ? "AVX2" : "SSE");
     int counters_per_thread = BenchmarkConfig::get_counters_per_thread(use_avx512, use_avx2, use_sse);
     
@@ -172,6 +179,8 @@ void simd_bench(int thread_count, const char* label, int seconds, bool use_sse, 
         std::cout << "[" << label << "] Total iterations: " << format_large_number(total_iterations) << std::endl;
         std::cout << "[" << label << "] Iterations per second: " << format_large_number(iterations_per_second) << std::endl;
         
+        return iterations_per_second;
+        
     } catch (const std::exception& e) {
         std::cerr << "Error in benchmark: " << e.what() << std::endl;
         stop_flag.store(true, std::memory_order_seq_cst);
@@ -227,15 +236,24 @@ void scaling_bench(const char* label, int seconds, bool use_sse = false, bool us
     }
 }
 
+struct BenchmarkResult {
+    std::string name;
+    uint64_t iterations_per_second;
+};
+
 int main(int argc, char* argv[]) {
     int max_cores = -1;
     bool scaling_test = false;
     bool use_sse = false;
     bool use_avx2 = false;
     bool use_avx512 = false;
+    bool explicit_mode = false;  // Sant om användaren specificerat någon flagga
+    
+    std::vector<BenchmarkResult> results;
     
     // Parse arguments
     for (int i = 1; i < argc; ++i) {
+        explicit_mode = true;  // Någon parameter angavs
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             std::cout << "Usage: ./speed_bench [singlepass] [--avx2|--avx512|--sse] [--scaling] [--max-cores=N]" << std::endl;
             std::cout << "  No argument: Run multi-threaded throughput benchmark (10s)" << std::endl;
@@ -298,14 +316,6 @@ int main(int argc, char* argv[]) {
     physical = logical / 2 > 0 ? logical / 2 : 1;
 #endif
 
-    // Adjust thread counts for SIMD modes
-    int counters_per_thread = use_avx512 ? 16 : (use_avx2 ? 8 : (use_sse ? 4 : 1));
-    if (use_sse || use_avx2) {
-        physical = (physical + counters_per_thread - 1) / counters_per_thread;
-        logical = (logical + counters_per_thread - 1) / counters_per_thread;
-    }
-    // För AVX-512 behåller vi det faktiska antalet kärnor som detekterades
-    
     if (max_cores > 0) {
         if (singlepass_mode) {
             if ((unsigned)max_cores < physical) physical = max_cores;
@@ -317,11 +327,64 @@ int main(int argc, char* argv[]) {
 
     std::cout << "C++ speed benchmark starting." << std::endl;
     
+    // Om inga parametrar angavs, kör alla tillgängliga SIMD-typer
+    if (!explicit_mode && !singlepass_mode && !scaling_test) {
+        std::cout << "\nRunning comprehensive benchmark with all available SIMD types..." << std::endl;
+        std::cout << "Each test will run for 10 seconds." << std::endl;
+        std::cout << "----------------------------------------" << std::endl;
+        
+        // Standard CPU benchmark
+        {
+            std::cout << "\nRunning standard CPU benchmark..." << std::endl;
+            results.push_back({"Standard CPU", generic_bench(logical, "CPU", 10)});
+        }
+        
+        // SSE benchmark
+        {
+            std::cout << "\nTesting SSE capabilities..." << std::endl;
+            results.push_back({"SSE", simd_bench(logical, "SSE", 10, true, false, false)});
+        }
+        
+        // AVX2 benchmark
+        {
+            std::cout << "\nTesting AVX2 capabilities..." << std::endl;
+            results.push_back({"AVX2", simd_bench(logical, "AVX2", 10, false, true, false)});
+        }
+        
+        // AVX-512 benchmark
+        {
+            std::cout << "\nTesting AVX-512 capabilities..." << std::endl;
+            results.push_back({"AVX-512", simd_bench(logical, "AVX-512", 10, false, false, true)});
+        }
+        
+        // Skriv ut sammanfattningen
+        std::cout << "\n========================================" << std::endl;
+        std::cout << "BENCHMARK SUMMARY" << std::endl;
+        std::cout << "----------------------------------------" << std::endl;
+        for (const auto& result : results) {
+            std::cout << result.name << ": " << format_large_number(result.iterations_per_second) 
+                      << " iterations/second" << std::endl;
+        }
+        std::cout << "========================================" << std::endl;
+        
+        return 0;
+    }
+    
+    // Original functionality continues below for explicit modes
     if (use_sse || use_avx2 || use_avx512) {
         const char* simd_type = use_avx512 ? "AVX-512" : (use_avx2 ? "AVX2" : "SSE");
+        int counters_per_thread = BenchmarkConfig::get_counters_per_thread(use_avx512, use_avx2, use_sse);
         std::cout << "Using " << simd_type << " SIMD instructions ("
                   << counters_per_thread << " parallel counters per thread)" << std::endl;
     }
+    
+    // Adjust thread counts for SIMD modes
+    int counters_per_thread = use_avx512 ? 16 : (use_avx2 ? 8 : (use_sse ? 4 : 1));
+    if (use_sse || use_avx2) {
+        physical = (physical + counters_per_thread - 1) / counters_per_thread;
+        logical = (logical + counters_per_thread - 1) / counters_per_thread;
+    }
+    // För AVX-512 behåller vi det faktiska antalet kärnor som detekterades
     
     std::cout << "Detected " << (physical * counters_per_thread)
               << " physical and " << (logical * counters_per_thread)
