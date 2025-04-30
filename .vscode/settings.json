@@ -1,6 +1,4 @@
 {
-  "makefile.configureOnOpen": true,
-
   "github.copilot.chat.testGeneration.instructions": [
     {
       "text": "Use verbose class name that clearly state the test case. Use the AAA pattern for test cases. Arrange, Act, Assert."
@@ -13,10 +11,5 @@
     {
       "text": "Be extremely detailed with the file changes and the reason for the change. "
     }
-  ],
-  "files.associations": {
-    "*.css": "tailwindcss",
-    "ostream": "cpp",
-    "*.tcc": "cpp"
-  }
+  ]
 }

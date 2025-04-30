@@ -94,6 +94,7 @@ void avx512_loop_work() {
         throw std::runtime_error("CPU does not support AVX-512 instructions");
     }
 
+#ifdef __AVX512F__
     alignas(64) volatile uint32_t count[16] = {
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
         0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
@@ -102,7 +103,6 @@ void avx512_loop_work() {
     };
 
     // Kontrollera om AVX-512 är aktiverat vid kompilering
-#ifdef __AVX512F__
     __m512i vec = _mm512_load_si512(const_cast<uint32_t*>(count));
     const __m512i one = _mm512_set1_epi32(1);
     const __m512i zero = _mm512_setzero_si512();

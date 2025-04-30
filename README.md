@@ -10,6 +10,10 @@ This project is a simple C++ benchmark tool that measures how fast your CPU can 
 - Supports multi-threaded benchmarking and a 'singlepass' mode for latency measurement.
 - Includes support for SIMD instructions (SSE, AVX2, AVX-512).
 
+## What the Benchmark Does
+
+The benchmark measures the performance of your CPU by executing highly optimized counting loops. It uses SIMD instructions (SSE, AVX2, AVX-512) and multi-threading to stress the CPU and evaluate its throughput. Each thread processes counters in parallel, decrementing them from their maximum value (4294967295) to zero. The benchmark reports the total iterations, loops, and iterations per second, providing insights into the CPU's computational capabilities.
+
 ## Usage
 
 1. Build the project:
